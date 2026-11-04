@@ -331,6 +331,20 @@ let mockExaminations = [
         exam_date: '2026-09-18',
         academic_year: '2025-2026',
         semester: 5
+    },
+    {
+        id: 'ex444444-4444-4444-4444-444444444444',
+        course_id: 'c3333333-3333-3333-3333-333333333333',
+        course_code: 'CS503',
+        course_name: 'Design & Analysis of Algorithms',
+        exam_name: 'Algorithms Midterm Assessment',
+        exam_type: 'midterm',
+        total_marks: 50.00,
+        passing_marks: 20.00,
+        weightage_percentage: 25.00,
+        exam_date: '2026-09-22',
+        academic_year: '2025-2026',
+        semester: 5
     }
 ];
 

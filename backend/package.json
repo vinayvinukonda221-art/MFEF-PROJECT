@@ -13,7 +13,8 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "helmet": "^8.0.0",
-    "morgan": "^1.10.0"
+    "morgan": "^1.10.0",
+    "pg": "^8.23.1"
   },
   "keywords": [
     "student-management-system",
@@ -25,4 +26,3 @@
   "author": "College Project Full-Stack Team",
   "license": "MIT"
 }
-

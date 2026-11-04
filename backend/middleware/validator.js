@@ -9,7 +9,11 @@ const validateStudentInput = (req, res, next) => {
     if (!full_name || full_name.trim().length < 2) errors.push('Full name is required (min 2 characters).');
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('Valid email address is required.');
     if (!roll_number || roll_number.trim().length < 2) errors.push('Roll number is required.');
-    if (semester === undefined || semester < 1 || semester > 8) errors.push('Semester must be an integer between 1 and 8.');
+
+    const semNum = Number(semester);
+    if (semester === undefined || isNaN(semNum) || semNum < 1 || semNum > 8) {
+        errors.push('Semester must be an integer between 1 and 8.');
+    }
     if (!department_id) errors.push('Department ID is required.');
 
     if (errors.length > 0) {

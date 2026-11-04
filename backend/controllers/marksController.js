@@ -1,6 +1,48 @@
 const { supabase, isSupabaseConfigured } = require('../config/supabase');
 const { calculateGrade } = require('../utils/gradeCalculator');
-let { mockExaminations, mockMarks } = require('../utils/mockData');
+let { mockExaminations, mockMarks, mockFaculty, mockCourses, mockStudents } = require('../utils/mockData');
+
+/**
+ * Helper: Resolve trusted faculty ID from authenticated user profile
+ */
+const resolveFacultyId = async (req) => {
+    if (!req.user || req.user.role !== 'faculty') return null;
+
+    if (isSupabaseConfigured() && supabase) {
+        const client = req.supabase || supabase;
+        const { data: fac } = await client
+            .from('faculty')
+            .select('id')
+            .eq('profile_id', req.user.id)
+            .single();
+        return fac?.id || null;
+    }
+
+    const fac = mockFaculty.find(f => f.profile_id === req.user.id || f.id === req.user.id || f.email === req.user.email);
+    return fac?.id || null;
+};
+
+/**
+ * Helper: Check if course is assigned to faculty member
+ */
+const verifyCourseAssignment = async (req, courseId, facultyId) => {
+    if (req.user.role === 'admin') return true;
+    if (!facultyId || !courseId) return false;
+
+    if (isSupabaseConfigured() && supabase) {
+        const client = req.supabase || supabase;
+        const { data: course } = await client
+            .from('courses')
+            .select('id, faculty_id')
+            .eq('id', courseId)
+            .single();
+
+        return Boolean(course && course.faculty_id === facultyId);
+    }
+
+    const course = mockCourses.find(c => c.id === courseId);
+    return Boolean(course && course.faculty_id === facultyId);
+};
 
 /**
  * Get Examinations List
@@ -11,7 +53,8 @@ const getExaminations = async (req, res) => {
         const { course_id, semester } = req.query;
 
         if (isSupabaseConfigured() && supabase) {
-            let query = supabase
+            const client = req.supabase || supabase;
+            let query = client
                 .from('examinations')
                 .select(`
                     id, exam_name, exam_type, total_marks, passing_marks, weightage_percentage,
@@ -26,7 +69,7 @@ const getExaminations = async (req, res) => {
 
             if (error) return res.status(500).json({ success: false, message: error.message });
 
-            const formatted = data.map(e => ({
+            const formatted = (data || []).map(e => ({
                 id: e.id,
                 exam_name: e.exam_name,
                 exam_type: e.exam_type,
@@ -51,7 +94,7 @@ const getExaminations = async (req, res) => {
 };
 
 /**
- * Create Examination
+ * Create Examination (Admin and Faculty)
  * POST /api/marks/examinations
  */
 const createExamination = async (req, res) => {
@@ -67,6 +110,7 @@ const createExamination = async (req, res) => {
             academic_year = '2025-2026',
             semester
         } = req.body;
+        const user = req.user;
 
         if (!course_id || !exam_name || !exam_type || !exam_date || !semester) {
             return res.status(400).json({
@@ -75,8 +119,21 @@ const createExamination = async (req, res) => {
             });
         }
 
+        // Faculty authorization check: course must be taught by this faculty member
+        if (user.role === 'faculty') {
+            const trustedFacultyId = await resolveFacultyId(req);
+            const isAssigned = await verifyCourseAssignment(req, course_id, trustedFacultyId);
+            if (!isAssigned) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Access forbidden: Faculty can only schedule examinations for courses assigned to them.'
+                });
+            }
+        }
+
         if (isSupabaseConfigured() && supabase) {
-            const { data, error } = await supabase
+            const client = req.supabase || supabase;
+            const { data, error } = await client
                 .from('examinations')
                 .insert([{
                     course_id,
@@ -119,15 +176,39 @@ const createExamination = async (req, res) => {
 };
 
 /**
- * Get Marks
+ * Get Marks with Record-Level Authorization
  * GET /api/marks
  */
 const getMarks = async (req, res) => {
     try {
         const { examination_id, student_id, course_id } = req.query;
+        const user = req.user;
+
+        // Security check for Students: strictly limited to viewing own marks
+        let effectiveStudentId = student_id;
+        if (user.role === 'student') {
+            let myStudentId = null;
+            if (isSupabaseConfigured() && supabase) {
+                const client = req.supabase || supabase;
+                const { data: st } = await client.from('students').select('id').eq('profile_id', user.id).single();
+                myStudentId = st?.id;
+            } else {
+                const st = mockStudents.find(s => s.profile_id === user.id || s.id === user.id || s.email === user.email);
+                myStudentId = st?.id || mockStudents[0]?.id;
+            }
+
+            if (student_id && myStudentId && student_id !== myStudentId) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Access forbidden: Students are only permitted to view their own examination marks.'
+                });
+            }
+            effectiveStudentId = myStudentId;
+        }
 
         if (isSupabaseConfigured() && supabase) {
-            let query = supabase
+            const client = req.supabase || supabase;
+            let query = client
                 .from('marks')
                 .select(`
                     id, marks_obtained, grade, grade_point, remarks, created_at,
@@ -142,18 +223,19 @@ const getMarks = async (req, res) => {
                 `);
 
             if (examination_id) query = query.eq('examination_id', examination_id);
-            if (student_id) query = query.eq('student_id', student_id);
+            if (effectiveStudentId) query = query.eq('student_id', effectiveStudentId);
 
             const { data, error } = await query;
             if (error) return res.status(500).json({ success: false, message: error.message });
 
-            let formatted = data.map(m => ({
+            let formatted = (data || []).map(m => ({
                 id: m.id,
                 examination_id: m.examinations?.id,
                 exam_name: m.examinations?.exam_name,
                 exam_type: m.examinations?.exam_type,
                 total_marks: m.examinations?.total_marks,
                 passing_marks: m.examinations?.passing_marks,
+                course_id: m.examinations?.courses?.id,
                 course_code: m.examinations?.courses?.code,
                 course_name: m.examinations?.courses?.name,
                 student_id: m.students?.id,
@@ -166,7 +248,7 @@ const getMarks = async (req, res) => {
             }));
 
             if (course_id) {
-                formatted = formatted.filter(m => m.examinations?.courses?.id === course_id);
+                formatted = formatted.filter(m => m.course_id === course_id);
             }
 
             return res.status(200).json({ success: true, marks: formatted });
@@ -175,7 +257,7 @@ const getMarks = async (req, res) => {
         // Mock Fallback
         let filtered = [...mockMarks];
         if (examination_id) filtered = filtered.filter(m => m.examination_id === examination_id);
-        if (student_id) filtered = filtered.filter(m => m.student_id === student_id);
+        if (effectiveStudentId) filtered = filtered.filter(m => m.student_id === effectiveStudentId);
 
         return res.status(200).json({ success: true, marks: filtered });
     } catch (err) {
@@ -184,16 +266,51 @@ const getMarks = async (req, res) => {
 };
 
 /**
- * Record Marks with Auto-Grading
+ * Record Marks with Auto-Grading & Authorization
  * POST /api/marks
  */
 const recordMarks = async (req, res) => {
     try {
-        const { examination_id, student_id, marks_obtained, remarks } = req.body;
+        const { examination_id, course_id, student_id, marks_obtained, remarks } = req.body;
+        const user = req.user;
+
+        // Faculty authorization check: must teach the course for this examination
+        if (user.role === 'faculty') {
+            const trustedFacultyId = await resolveFacultyId(req);
+            let isAssigned = false;
+
+            if (isSupabaseConfigured() && supabase) {
+                const client = req.supabase || supabase;
+                const { data: exam } = await client
+                    .from('examinations')
+                    .select('course_id, courses(faculty_id)')
+                    .eq('id', examination_id)
+                    .single();
+
+                const targetFacultyId = exam?.courses?.faculty_id;
+                if (targetFacultyId && targetFacultyId === trustedFacultyId) {
+                    isAssigned = true;
+                }
+            } else {
+                const exam = mockExaminations.find(e => e.id === examination_id);
+                const targetCourseId = course_id || exam?.course_id;
+                const course = mockCourses.find(c => c.id === targetCourseId);
+                if (course && course.faculty_id && course.faculty_id === trustedFacultyId) {
+                    isAssigned = true;
+                }
+            }
+
+            if (!isAssigned) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Access forbidden: Faculty members can only enter marks for examinations in their assigned courses.'
+                });
+            }
+        }
 
         if (isSupabaseConfigured() && supabase) {
-            // Fetch total marks for this examination to calculate grade accurately
-            const { data: exam, error: examErr } = await supabase
+            const client = req.supabase || supabase;
+            const { data: exam, error: examErr } = await client
                 .from('examinations')
                 .select('total_marks')
                 .eq('id', examination_id)
@@ -202,7 +319,7 @@ const recordMarks = async (req, res) => {
             const total = exam ? exam.total_marks : 100;
             const evalResult = calculateGrade(marks_obtained, total);
 
-            const { data, error } = await supabase
+            const { data, error } = await client
                 .from('marks')
                 .upsert([{
                     examination_id,
@@ -256,16 +373,46 @@ const recordMarks = async (req, res) => {
 };
 
 /**
- * Update Marks
+ * Update Marks with Authorization
  * PUT /api/marks/:id
  */
 const updateMarks = async (req, res) => {
     try {
         const { id } = req.params;
         const { marks_obtained, remarks } = req.body;
+        const user = req.user;
+
+        // Faculty authorization check for updates
+        if (user.role === 'faculty') {
+            const trustedFacultyId = await resolveFacultyId(req);
+            let isAssigned = false;
+
+            if (isSupabaseConfigured() && supabase) {
+                const client = req.supabase || supabase;
+                const { data: mark } = await client
+                    .from('marks')
+                    .select('examination_id, examinations(course_id, courses(faculty_id))')
+                    .eq('id', id)
+                    .single();
+
+                if (mark && mark.examinations?.courses?.faculty_id === trustedFacultyId) {
+                    isAssigned = true;
+                }
+            } else {
+                isAssigned = true; // demo mode
+            }
+
+            if (!isAssigned) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Access forbidden: You cannot modify marks for an examination outside your assigned courses.'
+                });
+            }
+        }
 
         if (isSupabaseConfigured() && supabase) {
-            const { data: currentMark } = await supabase
+            const client = req.supabase || supabase;
+            const { data: currentMark } = await client
                 .from('marks')
                 .select('examination_id, examinations(total_marks)')
                 .eq('id', id)
@@ -274,7 +421,7 @@ const updateMarks = async (req, res) => {
             const total = currentMark?.examinations?.total_marks || 100;
             const evalResult = calculateGrade(marks_obtained, total);
 
-            const { data, error } = await supabase
+            const { data, error } = await client
                 .from('marks')
                 .update({
                     marks_obtained: Number(marks_obtained),
@@ -316,4 +463,3 @@ module.exports = {
     recordMarks,
     updateMarks
 };
-

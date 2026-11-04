@@ -161,12 +161,54 @@ const createFaculty = async (req, res) => {
 const updateFaculty = async (req, res) => {
     try {
         const { id } = req.params;
-        const updates = req.body;
+        const {
+            full_name,
+            phone,
+            department_id,
+            designation,
+            qualification,
+            specialization,
+            office_room,
+            status
+        } = req.body;
 
         if (isSupabaseConfigured() && supabase) {
+            // Find existing faculty to locate profile_id
+            const { data: existingFac, error: findErr } = await supabase
+                .from('faculty')
+                .select('profile_id')
+                .eq('id', id)
+                .single();
+
+            if (findErr || !existingFac) {
+                return res.status(404).json({ success: false, message: 'Faculty record not found.' });
+            }
+
+            // Update profile if full_name or phone is provided
+            if (full_name || phone) {
+                await supabase
+                    .from('profiles')
+                    .update({
+                        full_name,
+                        phone,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', existingFac.profile_id);
+            }
+
+            // Update faculty record
+            const facultyUpdates = {};
+            if (department_id !== undefined) facultyUpdates.department_id = department_id;
+            if (designation !== undefined) facultyUpdates.designation = designation;
+            if (qualification !== undefined) facultyUpdates.qualification = qualification;
+            if (specialization !== undefined) facultyUpdates.specialization = specialization;
+            if (office_room !== undefined) facultyUpdates.office_room = office_room;
+            if (status !== undefined) facultyUpdates.status = status;
+            facultyUpdates.updated_at = new Date().toISOString();
+
             const { data, error } = await supabase
                 .from('faculty')
-                .update(updates)
+                .update(facultyUpdates)
                 .eq('id', id)
                 .select()
                 .single();
@@ -178,7 +220,7 @@ const updateFaculty = async (req, res) => {
         const idx = mockFaculty.findIndex(f => f.id === id);
         if (idx === -1) return res.status(404).json({ success: false, message: 'Faculty not found.' });
 
-        mockFaculty[idx] = { ...mockFaculty[idx], ...updates };
+        mockFaculty[idx] = { ...mockFaculty[idx], ...req.body };
         return res.status(200).json({ success: true, message: 'Faculty updated.', faculty: mockFaculty[idx] });
     } catch (err) {
         return res.status(500).json({ success: false, message: 'Error updating faculty.', error: err.message });
@@ -192,8 +234,15 @@ const deleteFaculty = async (req, res) => {
         if (isSupabaseConfigured() && supabase) {
             const { data: faculty } = await supabase.from('faculty').select('profile_id').eq('id', id).single();
             if (faculty && faculty.profile_id) {
-                await supabase.auth.admin.deleteUser(faculty.profile_id);
+                try {
+                    if (supabase?.auth?.admin?.deleteUser) {
+                        await supabase.auth.admin.deleteUser(faculty.profile_id);
+                    }
+                } catch (authErr) {
+                    console.warn('[DeleteFaculty] Auth user deletion skipped/non-fatal:', authErr.message);
+                }
                 await supabase.from('profiles').delete().eq('id', faculty.profile_id);
+                await supabase.from('faculty').delete().eq('id', id);
             } else {
                 await supabase.from('faculty').delete().eq('id', id);
             }

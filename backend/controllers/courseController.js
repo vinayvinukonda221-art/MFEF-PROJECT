@@ -1,5 +1,5 @@
 const { supabase, isSupabaseConfigured } = require('../config/supabase');
-let { mockCourses } = require('../utils/mockData');
+let { mockCourses, mockFaculty } = require('../utils/mockData');
 
 const getAllCourses = async (req, res) => {
     try {
@@ -149,12 +149,50 @@ const createCourse = async (req, res) => {
 const updateCourse = async (req, res) => {
     try {
         const { id } = req.params;
-        const updates = req.body;
+        const user = req.user;
+        let allowedUpdates = { ...req.body };
+
+        // Record-level security: Faculty can only update their assigned courses (description & syllabus)
+        if (user && user.role === 'faculty') {
+            let isAssigned = false;
+            let facId = null;
+
+            if (isSupabaseConfigured() && supabase) {
+                const client = req.supabase || supabase;
+                const { data: fac } = await client.from('faculty').select('id').eq('profile_id', user.id).single();
+                facId = fac?.id;
+                const { data: currentCourse } = await client.from('courses').select('id, faculty_id').eq('id', id).single();
+                if (currentCourse && facId && currentCourse.faculty_id === facId) {
+                    isAssigned = true;
+                }
+            } else {
+                const fac = mockFaculty.find(f => f.profile_id === user.id || f.id === user.id || f.email === user.email);
+                facId = fac?.id;
+                const currentCourse = mockCourses.find(c => c.id === id);
+                if (currentCourse && facId && currentCourse.faculty_id === facId) {
+                    isAssigned = true;
+                }
+            }
+
+            if (!isAssigned) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Access forbidden: Faculty members may only modify courses assigned to them.'
+                });
+            }
+
+            // Restrict fields faculty can alter
+            allowedUpdates = {
+                description: req.body.description,
+                syllabus_url: req.body.syllabus_url
+            };
+        }
 
         if (isSupabaseConfigured() && supabase) {
-            const { data: course, error } = await supabase
+            const client = req.supabase || supabase;
+            const { data: course, error } = await client
                 .from('courses')
-                .update(updates)
+                .update(allowedUpdates)
                 .eq('id', id)
                 .select()
                 .single();
@@ -166,7 +204,7 @@ const updateCourse = async (req, res) => {
         const idx = mockCourses.findIndex(c => c.id === id);
         if (idx === -1) return res.status(404).json({ success: false, message: 'Course not found.' });
 
-        mockCourses[idx] = { ...mockCourses[idx], ...updates };
+        mockCourses[idx] = { ...mockCourses[idx], ...allowedUpdates };
         return res.status(200).json({ success: true, message: 'Course updated.', course: mockCourses[idx] });
     } catch (err) {
         return res.status(500).json({ success: false, message: 'Error updating course.', error: err.message });

@@ -4,8 +4,9 @@ import { useAuth } from '../context/AuthContext';
 import { FiMail, FiLock, FiArrowRight, FiShield, FiUserCheck, FiBook } from 'react-icons/fi';
 
 const Login = () => {
-  const [email, setEmail] = useState('admin@sms.edu');
-  const [password, setPassword] = useState('Admin@123');
+  const isDevMode = Boolean(import.meta.env.DEV);
+  const [email, setEmail] = useState(isDevMode ? 'admin@sms.edu' : '');
+  const [password, setPassword] = useState(isDevMode ? 'Admin@123' : '');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -119,43 +120,45 @@ const Login = () => {
             </button>
           </form>
 
-          {/* Quick Demo Credentials Panel */}
-          <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider text-center mb-3">
-              One-Click Evaluation Credentials
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('admin@sms.edu', 'Admin@123')}
-                className="flex flex-col items-center justify-center p-2.5 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50/60 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 hover:bg-purple-100 transition-colors"
-              >
-                <FiShield className="w-4 h-4 mb-1" />
-                <span className="text-xs font-bold">Admin</span>
-                <span className="text-[9px] opacity-75">Admin@123</span>
-              </button>
+          {/* Quick Demo Credentials Panel (Gated to Local Development / Evaluation) */}
+          {isDevMode && (
+            <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider text-center mb-3">
+                Development Evaluation Credentials
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin('admin@sms.edu', 'Admin@123')}
+                  className="flex flex-col items-center justify-center p-2.5 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50/60 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 hover:bg-purple-100 transition-colors"
+                >
+                  <FiShield className="w-4 h-4 mb-1" />
+                  <span className="text-xs font-bold">Admin</span>
+                  <span className="text-[9px] opacity-75">Admin@123</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('faculty@sms.edu', 'Faculty@123')}
-                className="flex flex-col items-center justify-center p-2.5 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 hover:bg-blue-100 transition-colors"
-              >
-                <FiUserCheck className="w-4 h-4 mb-1" />
-                <span className="text-xs font-bold">Faculty</span>
-                <span className="text-[9px] opacity-75">Faculty@123</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin('faculty@sms.edu', 'Faculty@123')}
+                  className="flex flex-col items-center justify-center p-2.5 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/60 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 hover:bg-blue-100 transition-colors"
+                >
+                  <FiUserCheck className="w-4 h-4 mb-1" />
+                  <span className="text-xs font-bold">Faculty</span>
+                  <span className="text-[9px] opacity-75">Faculty@123</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('student@sms.edu', 'Student@123')}
-                className="flex flex-col items-center justify-center p-2.5 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 transition-colors"
-              >
-                <FiBook className="w-4 h-4 mb-1" />
-                <span className="text-xs font-bold">Student</span>
-                <span className="text-[9px] opacity-75">Student@123</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin('student@sms.edu', 'Student@123')}
+                  className="flex flex-col items-center justify-center p-2.5 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 transition-colors"
+                >
+                  <FiBook className="w-4 h-4 mb-1" />
+                  <span className="text-xs font-bold">Student</span>
+                  <span className="text-[9px] opacity-75">Student@123</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Security & RLS notice */}

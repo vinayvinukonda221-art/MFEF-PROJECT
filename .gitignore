@@ -25,3 +25,10 @@ pnpm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Intermediate archives and staging
+EduPulse_SMS_Phase2_Secured.zip
+EduPulse_SMS_Phase3_1_Secured.zip
+staging_build/
+staging_final_build/
+

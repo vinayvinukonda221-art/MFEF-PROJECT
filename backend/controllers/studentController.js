@@ -1,5 +1,5 @@
 const { supabase, isSupabaseConfigured } = require('../config/supabase');
-let { mockStudents } = require('../utils/mockData');
+let { mockStudents, mockFaculty } = require('../utils/mockData');
 
 /**
  * Get All Students with Filtering & Pagination
@@ -13,7 +13,8 @@ const getAllStudents = async (req, res) => {
         const offset = (pageNum - 1) * limitNum;
 
         if (isSupabaseConfigured() && supabase) {
-            let query = supabase
+            const client = req.supabase || supabase;
+            let query = client
                 .from('students')
                 .select(`
                     id, roll_number, registration_number, semester, academic_year, batch,
@@ -84,6 +85,15 @@ const getAllStudents = async (req, res) => {
 
         // Mock Fallback
         let filtered = [...mockStudents];
+
+        // Excessive Data Access Prevention (BUG-05): Faculty restricted to their department/students
+        if (req.user && req.user.role === 'faculty') {
+            const fac = mockFaculty.find(f => f.profile_id === req.user.id || f.id === req.user.id || f.email === req.user.email);
+            if (fac && fac.department_id) {
+                filtered = filtered.filter(s => s.department_id === fac.department_id);
+            }
+        }
+
         if (department_id) {
             filtered = filtered.filter(s => s.department_id === department_id);
         }
@@ -128,9 +138,11 @@ const getAllStudents = async (req, res) => {
 const getStudentById = async (req, res) => {
     try {
         const { id } = req.params;
+        const user = req.user;
 
         if (isSupabaseConfigured() && supabase) {
-            const { data: student, error } = await supabase
+            const client = req.supabase || supabase;
+            const { data: student, error } = await client
                 .from('students')
                 .select(`
                     *,
@@ -151,6 +163,14 @@ const getStudentById = async (req, res) => {
                 });
             }
 
+            // Record-level authorization for student role
+            if (user && user.role === 'student' && student.profile_id !== user.id) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Access forbidden: Students are only permitted to view their own student record.'
+                });
+            }
+
             return res.status(200).json({
                 success: true,
                 student
@@ -162,6 +182,14 @@ const getStudentById = async (req, res) => {
             return res.status(404).json({
                 success: false,
                 message: 'Student not found in demo data.'
+            });
+        }
+
+        // Record-level authorization for student role in demo mode
+        if (user && user.role === 'student' && student.profile_id !== user.id && student.email !== user.email) {
+            return res.status(403).json({
+                success: false,
+                message: 'Access forbidden: Students are only permitted to view their own student record.'
             });
         }
 
@@ -434,9 +462,18 @@ const deleteStudent = async (req, res) => {
                 .single();
 
             if (student && student.profile_id) {
-                // Deleting profile cascades to student, or auth user deletion
-                await supabase.auth.admin.deleteUser(student.profile_id);
+                // Delete auth user if it exists in Supabase Auth
+                try {
+                    if (supabase?.auth?.admin?.deleteUser) {
+                        await supabase.auth.admin.deleteUser(student.profile_id);
+                    }
+                } catch (authErr) {
+                    console.warn('[DeleteStudent] Auth user deletion skipped/non-fatal:', authErr.message);
+                }
+                // Deleting profile cascades to student
                 await supabase.from('profiles').delete().eq('id', student.profile_id);
+                // Also ensure student table row is removed in case of detached profile
+                await supabase.from('students').delete().eq('id', id);
             } else {
                 await supabase.from('students').delete().eq('id', id);
             }

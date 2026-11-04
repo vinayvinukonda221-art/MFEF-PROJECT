@@ -12,7 +12,9 @@ const notFoundHandler = (req, res, next) => {
 const errorHandler = (err, req, res, next) => {
     console.error(`[API Error] ${req.method} ${req.url}:`, err);
 
-    const statusCode = err.statusCode || res.statusCode !== 200 ? res.statusCode : 500;
+    // Operator precedence fix: ensure res.statusCode is evaluated within range [400, 599]
+    const validResStatus = (res.statusCode >= 400 && res.statusCode < 600) ? res.statusCode : 500;
+    const statusCode = err.statusCode || validResStatus;
     
     res.status(statusCode).json({
         success: false,

@@ -28,9 +28,11 @@ import {
 const AdminDashboard = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState(null);
 
   const fetchDashboardStats = async () => {
     setLoading(true);
+    setErrorMsg(null);
     try {
       const res = await dashboardService.getStats();
       if (res.data?.success) {
@@ -38,6 +40,7 @@ const AdminDashboard = () => {
       }
     } catch (err) {
       console.error('Failed to load dashboard statistics:', err);
+      setErrorMsg(err.response?.data?.message || err.message || 'Could not load real-time data.');
     } finally {
       setLoading(false);
     }
@@ -104,6 +107,13 @@ const AdminDashboard = () => {
           <span>Refresh Data</span>
         </button>
       </div>
+
+      {errorMsg && (
+        <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-xs flex items-center justify-between">
+          <span>⚠️ {errorMsg} (Displaying cached fallback analytics)</span>
+          <button onClick={fetchDashboardStats} className="underline font-semibold ml-2">Retry</button>
+        </div>
+      )}
 
       {/* Metric Stat Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
