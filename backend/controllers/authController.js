@@ -329,9 +329,175 @@ const updateProfile = async (req, res) => {
     }
 };
 
+/**
+ * Create New Administrator Account
+ * POST /api/auth/create-admin
+ * Security: Strictly restricted to institutional administrators (Admin RBAC).
+ */
+const createAdmin = async (req, res) => {
+    try {
+        const { full_name, email, password, phone } = req.body;
+
+        if (!full_name || full_name.trim().length < 2) {
+            return res.status(400).json({ success: false, message: 'Full name is required (minimum 2 characters).' });
+        }
+        if (!email || !email.includes('@')) {
+            return res.status(400).json({ success: false, message: 'Valid institutional email is required.' });
+        }
+        if (!password || password.length < 6) {
+            return res.status(400).json({ success: false, message: 'Password is required (minimum 6 characters).' });
+        }
+
+        const normalizedEmail = email.trim().toLowerCase();
+
+        // 1. Live Supabase Auth
+        if (isSupabaseConfigured() && supabase) {
+            // Check if profile with email already exists
+            const { data: existingProf } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('email', normalizedEmail)
+                .single();
+
+            if (existingProf) {
+                return res.status(400).json({ success: false, message: 'An account with this email address already exists.' });
+            }
+
+            // Create Supabase Auth user
+            const { data: authUser, error: authErr } = await supabase.auth.admin.createUser({
+                email: normalizedEmail,
+                password,
+                email_confirm: true,
+                user_metadata: {
+                    full_name: full_name.trim(),
+                    role: 'admin'
+                }
+            });
+
+            if (authErr) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Could not create admin auth user: ${authErr.message}`
+                });
+            }
+
+            const adminId = authUser.user.id;
+
+            // Upsert profiles table with role: admin
+            const { data: profile, error: profErr } = await supabase
+                .from('profiles')
+                .upsert({
+                    id: adminId,
+                    email: normalizedEmail,
+                    full_name: full_name.trim(),
+                    role: 'admin',
+                    phone: phone ? String(phone).trim() : null,
+                    is_active: true
+                })
+                .select()
+                .single();
+
+            if (profErr) {
+                await supabase.auth.admin.deleteUser(adminId);
+                return res.status(400).json({ success: false, message: `Failed to create admin profile: ${profErr.message}` });
+            }
+
+            return res.status(201).json({
+                success: true,
+                message: 'Administrator account created successfully.',
+                admin: {
+                    id: profile.id,
+                    email: profile.email,
+                    full_name: profile.full_name,
+                    role: profile.role,
+                    phone: profile.phone,
+                    is_active: profile.is_active
+                }
+            });
+        }
+
+        // 2. Demo / Mock Mode
+        const existing = mockUsers.find(u => u.email.toLowerCase() === normalizedEmail);
+        if (existing) {
+            return res.status(400).json({ success: false, message: 'An account with this email address already exists.' });
+        }
+
+        const newAdmin = {
+            id: `a-${Date.now()}`,
+            email: normalizedEmail,
+            password: password,
+            full_name: full_name.trim(),
+            role: 'admin',
+            phone: phone ? String(phone).trim() : '',
+            is_active: true
+        };
+        mockUsers.push(newAdmin);
+
+        return res.status(201).json({
+            success: true,
+            message: 'Administrator account created in demo mode successfully.',
+            admin: {
+                id: newAdmin.id,
+                email: newAdmin.email,
+                full_name: newAdmin.full_name,
+                role: 'admin',
+                phone: newAdmin.phone,
+                is_active: true
+            }
+        });
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            message: 'Internal error creating administrator account.',
+            error: err.message
+        });
+    }
+};
+
+/**
+ * Get All Administrator Accounts
+ * GET /api/auth/admins
+ * Security: Strictly restricted to institutional administrators (Admin RBAC).
+ */
+const getAdmins = async (req, res) => {
+    try {
+        if (isSupabaseConfigured() && supabase) {
+            const client = req.supabase || supabase;
+            const { data: admins, error } = await client
+                .from('profiles')
+                .select('id, email, full_name, role, phone, avatar_url, is_active, created_at')
+                .eq('role', 'admin')
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                return res.status(500).json({ success: false, message: error.message });
+            }
+            return res.status(200).json({ success: true, admins: admins || [] });
+        }
+
+        const admins = mockUsers
+            .filter(u => u.role === 'admin')
+            .map(u => ({
+                id: u.id,
+                email: u.email,
+                full_name: u.full_name,
+                role: u.role,
+                phone: u.phone,
+                is_active: u.is_active !== false,
+                created_at: new Date().toISOString()
+            }));
+
+        return res.status(200).json({ success: true, admins });
+    } catch (err) {
+        return res.status(500).json({ success: false, message: err.message });
+    }
+};
+
 module.exports = {
     login,
     logout,
     getProfile,
-    updateProfile
+    updateProfile,
+    createAdmin,
+    getAdmins
 };

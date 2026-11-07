@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { dashboardService } from '../../services/api';
+import { dashboardService, authService } from '../../services/api';
 import StatCard from '../../components/StatCard';
+import Modal from '../../components/Modal';
 import { 
   FiUsers, 
   FiUserCheck, 
@@ -8,7 +9,10 @@ import {
   FiBookOpen, 
   FiCheckCircle, 
   FiAward,
-  FiRefreshCw
+  FiRefreshCw,
+  FiUserPlus,
+  FiShield,
+  FiKey
 } from 'react-icons/fi';
 import {
   BarChart,
@@ -30,6 +34,18 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
 
+  // Admin Management Modal State
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [adminsList, setAdminsList] = useState([]);
+  const [adminSubmitting, setAdminSubmitting] = useState(false);
+  const [adminNotice, setAdminNotice] = useState(null);
+  const [adminFormData, setAdminFormData] = useState({
+    full_name: '',
+    email: '',
+    password: '',
+    phone: ''
+  });
+
   const fetchDashboardStats = async () => {
     setLoading(true);
     setErrorMsg(null);
@@ -43,6 +59,53 @@ const AdminDashboard = () => {
       setErrorMsg(err.response?.data?.message || err.message || 'Could not load real-time data.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAdmins = async () => {
+    try {
+      const res = await authService.getAdmins();
+      if (res.data?.success) {
+        setAdminsList(res.data.admins || []);
+      }
+    } catch (err) {
+      console.error('Failed to load administrators:', err);
+    }
+  };
+
+  const handleOpenAdminModal = () => {
+    setAdminNotice(null);
+    setAdminFormData({ full_name: '', email: '', password: '', phone: '' });
+    setIsAdminModalOpen(true);
+    fetchAdmins();
+  };
+
+  const handleCreateAdmin = async (e) => {
+    e.preventDefault();
+    setAdminSubmitting(true);
+    setAdminNotice(null);
+    try {
+      const res = await authService.createAdmin(adminFormData);
+      if (res.data?.success) {
+        setAdminNotice({
+          type: 'success',
+          message: res.data.message || 'Administrator account registered successfully!'
+        });
+        setAdminFormData({ full_name: '', email: '', password: '', phone: '' });
+        fetchAdmins();
+      } else {
+        setAdminNotice({
+          type: 'error',
+          message: res.data?.message || 'Failed to create administrator'
+        });
+      }
+    } catch (err) {
+      setAdminNotice({
+        type: 'error',
+        message: err.response?.data?.message || err.message || 'Error creating administrator'
+      });
+    } finally {
+      setAdminSubmitting(false);
     }
   };
 
@@ -98,14 +161,24 @@ const AdminDashboard = () => {
           </p>
         </div>
 
-        <button
-          onClick={fetchDashboardStats}
-          disabled={loading}
-          className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors"
-        >
-          <FiRefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          <span>Refresh Data</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleOpenAdminModal}
+            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition-colors"
+          >
+            <FiShield className="w-3.5 h-3.5" />
+            <span>Manage Admins</span>
+          </button>
+
+          <button
+            onClick={fetchDashboardStats}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors"
+          >
+            <FiRefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh Data</span>
+          </button>
+        </div>
       </div>
 
       {errorMsg && (
@@ -326,6 +399,161 @@ const AdminDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Admin Management Modal */}
+      <Modal
+        isOpen={isAdminModalOpen}
+        onClose={() => setIsAdminModalOpen(false)}
+        title="Institutional Administrator Access"
+        size="lg"
+      >
+        <div className="space-y-6">
+          {adminNotice && (
+            <div
+              className={`p-3 rounded-xl text-xs flex items-center justify-between ${
+                adminNotice.type === 'success'
+                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
+                  : 'bg-red-50 text-red-800 border border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800'
+              }`}
+            >
+              <span>{adminNotice.message}</span>
+              <button
+                onClick={() => setAdminNotice(null)}
+                className="font-bold ml-2 text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* Create Admin Form */}
+          <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-3">
+              <FiUserPlus className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              Register New Administrator
+            </h3>
+            <form onSubmit={handleCreateAdmin} className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">
+                    Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Dr. Jane Smith"
+                    value={adminFormData.full_name}
+                    onChange={(e) => setAdminFormData({ ...adminFormData, full_name: e.target.value })}
+                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">
+                    Institutional Email *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="admin.jane@edupulse.edu"
+                    value={adminFormData.email}
+                    onChange={(e) => setAdminFormData({ ...adminFormData, email: e.target.value })}
+                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">
+                    Login Password * (min 8 chars)
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    placeholder="Create a secure password"
+                    value={adminFormData.password}
+                    onChange={(e) => setAdminFormData({ ...adminFormData, password: e.target.value })}
+                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">
+                    Contact Phone (Optional)
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="+91 9876543210"
+                    value={adminFormData.phone}
+                    onChange={(e) => setAdminFormData({ ...adminFormData, phone: e.target.value })}
+                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={adminSubmitting}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-colors disabled:opacity-50"
+                >
+                  <FiKey className="w-3.5 h-3.5" />
+                  <span>{adminSubmitting ? 'Creating Administrator...' : 'Create Admin Account'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Active Administrators List */}
+          <div>
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-3">
+              <FiShield className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              Existing Administrators ({adminsList.length})
+            </h3>
+
+            <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-xl">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Administrator</th>
+                    <th className="px-3 py-2 font-medium">Email</th>
+                    <th className="px-3 py-2 font-medium">Phone</th>
+                    <th className="px-3 py-2 font-medium">Role</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-750">
+                  {adminsList.length === 0 ? (
+                    <tr>
+                      <td colSpan="4" className="px-3 py-4 text-center text-slate-400 italic">
+                        No additional administrators found.
+                      </td>
+                    </tr>
+                  ) : (
+                    adminsList.map((adm, idx) => (
+                      <tr key={adm.id || idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                        <td className="px-3 py-2 font-semibold text-slate-800 dark:text-slate-200">
+                          {adm.full_name || 'Admin'}
+                        </td>
+                        <td className="px-3 py-2 text-slate-600 dark:text-slate-400 font-mono">
+                          {adm.email}
+                        </td>
+                        <td className="px-3 py-2 text-slate-500 dark:text-slate-400">
+                          {adm.phone || '—'}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                            Administrator
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

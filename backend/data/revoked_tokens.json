@@ -1,3 +1,5 @@
 [
-  "mock-token-revocation-test"
+  "mock-token-revocation-test",
+  "mock-token-revocation-test-123",
+  "persistent-blacklist-token-xyz"
 ]

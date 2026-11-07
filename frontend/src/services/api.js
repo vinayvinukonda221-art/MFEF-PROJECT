@@ -47,7 +47,9 @@ api.interceptors.response.use(
 export const authService = {
   login: (credentials) => api.post('/auth/login', credentials),
   logout: () => api.post('/auth/logout'),
-  getProfile: () => api.get('/auth/profile')
+  getProfile: () => api.get('/auth/profile'),
+  createAdmin: (data) => api.post('/auth/create-admin', data),
+  getAdmins: () => api.get('/auth/admins')
 };
 
 // Students Services

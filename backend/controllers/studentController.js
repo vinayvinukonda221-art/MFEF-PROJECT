@@ -1,5 +1,5 @@
 const { supabase, isSupabaseConfigured } = require('../config/supabase');
-let { mockStudents, mockFaculty } = require('../utils/mockData');
+let { mockStudents, mockFaculty, mockUsers } = require('../utils/mockData');
 
 /**
  * Get All Students with Filtering & Pagination
@@ -325,10 +325,34 @@ const createStudent = async (req, res) => {
 
         mockStudents.unshift(newStudent);
 
+        // Add login credentials to mock auth system for demo mode
+        const existingUserIdx = mockUsers.findIndex(u => u.email.toLowerCase() === email.toLowerCase());
+        const studentUser = {
+            id: newStudent.profile_id,
+            email,
+            password: password || 'Password@123',
+            full_name,
+            role: 'student',
+            student_id: newId,
+            roll_number,
+            department: newStudent.department_name,
+            phone: phone || '',
+            is_active: true
+        };
+        if (existingUserIdx >= 0) {
+            mockUsers[existingUserIdx] = studentUser;
+        } else {
+            mockUsers.push(studentUser);
+        }
+
         return res.status(201).json({
             success: true,
-            message: 'Student added to demo system successfully.',
-            student: newStudent
+            message: 'Student registered with login access successfully.',
+            student: newStudent,
+            loginCredentials: {
+                email,
+                role: 'student'
+            }
         });
     } catch (err) {
         return res.status(500).json({
