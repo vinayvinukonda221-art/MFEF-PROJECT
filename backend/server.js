@@ -37,6 +37,22 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
+// Welcome / Root API Info Route
+app.get('/', (req, res) => {
+    res.status(200).json({
+        success: true,
+        message: '🎓 EduPulse Student Management System API is live and operational.',
+        version: '1.0.0',
+        documentation: {
+            health: '/api/health',
+            auth: '/api/auth/login',
+            dashboard: '/api/dashboard/stats',
+            students: '/api/students',
+            courses: '/api/courses'
+        }
+    });
+});
+
 // Healthcheck Route
 app.get('/api/health', (req, res) => {
     res.status(200).json({
