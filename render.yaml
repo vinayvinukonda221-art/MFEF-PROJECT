@@ -1,10 +1,9 @@
 services:
   - type: web
-    name: edupulse-backend
+    name: edupulse-sms
     runtime: node
-    rootDir: backend
     plan: free
-    buildCommand: npm install --production
+    buildCommand: npm install
     startCommand: node server.js
     healthCheckPath: /api/health
     autoDeploy: true
@@ -23,4 +22,3 @@ services:
         sync: false
       - key: CORS_ORIGIN
         value: "*"
-

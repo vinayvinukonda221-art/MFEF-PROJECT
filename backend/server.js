@@ -37,8 +37,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
-// Welcome / Root API Info Route
-app.get('/', (req, res) => {
+// Base API Info Route
+app.get('/api', (req, res) => {
     res.status(200).json({
         success: true,
         message: '🎓 EduPulse Student Management System API is live and operational.',
@@ -74,6 +74,20 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/marks', marksRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/reports', reportRoutes);
+
+// Serve Static Frontend (Unified Full-Stack Deployment on Render)
+const path = require('path');
+const fs = require('fs');
+const frontendDist = path.join(__dirname, '../frontend/dist');
+if (fs.existsSync(frontendDist)) {
+    app.use(express.static(frontendDist));
+    app.get('*', (req, res, next) => {
+        if (req.path.startsWith('/api')) {
+            return next();
+        }
+        res.sendFile(path.join(frontendDist, 'index.html'));
+    });
+}
 
 // Error Handling Middleware
 app.use(notFoundHandler);
